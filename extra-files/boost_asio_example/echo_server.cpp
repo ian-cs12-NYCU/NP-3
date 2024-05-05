@@ -11,12 +11,10 @@ class session
 {
 public:
   session(tcp::socket socket)
-    : socket_(std::move(socket))
-  {
+    : socket_(std::move(socket)){
   }
 
-  void start()
-  {
+  void start(){
     do_read();
   }
 
@@ -58,7 +56,7 @@ public:
   server(boost::asio::io_context& io_context, short port)
     : acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
   {
-    do_accept();
+    do_accept(); // accpet the connection when the server construct
   }
 
 private:
