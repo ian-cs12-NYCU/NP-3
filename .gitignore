@@ -40,3 +40,6 @@
 # End of https://www.toptal.com/developers/gitignore/api/c++
 http_server
 console.cgi
+echo_server
+Just_for_Test
+Just_for_Test.cpp

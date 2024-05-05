@@ -15,6 +15,7 @@ public:
   }
 
   void start(){
+    std::cout << "Start session" << std::endl;
     do_read();
   }
 
@@ -65,8 +66,10 @@ private:
     acceptor_.async_accept(
         [this](boost::system::error_code ec, tcp::socket socket)
         {
+          std::cout << "Accept connection" << std::endl;
           if (!ec)
           {
+            std::cout << "Create session" << std::endl;
             std::make_shared<session>(std::move(socket))->start();
           }
 
