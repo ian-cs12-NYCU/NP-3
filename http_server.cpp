@@ -55,6 +55,7 @@ class session : public std::enable_shared_from_this<session> {
                             std::cerr << "execv failed" << std::endl;
                             perror("execv");
                         }
+
                         exit(0);
                     } else { // Parent process
                         // Close the socket in the parent process
