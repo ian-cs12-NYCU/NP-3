@@ -136,7 +136,6 @@ void Shell_Connector::do_read() {
         [this, self](const boost::system::error_code &ec, std::size_t length) {
             if (!ec) {
                 std::string msg(data, length);
-                std::cerr << "do_read success user-" << std::to_string(user_id) << "read message: " << msg << "\n";
                 memset(data, 0, MAX_MESSAGE_LEN);
 
                 // [TODO] send msg to html format by cout
@@ -148,7 +147,6 @@ void Shell_Connector::do_read() {
                         getline(file_in, command);
                         command += "\n";
                         
-                        // [TODO] send msg to html format by cout
                         send_command_from_file(user_id, command);
                         do_write(command);
                     } else {
@@ -160,6 +158,7 @@ void Shell_Connector::do_read() {
                 }
             } else {
                 std::cerr << "user-" << user_id <<" do_read error: " << ec.message() << std::endl;
+                my_socket.close();
             }
         });
 }
@@ -168,10 +167,16 @@ void Shell_Connector::do_write(std::string msg) {
     auto self(shared_from_this());
     boost::asio::async_write(
         my_socket, boost::asio::buffer(msg),
-        [this, self](const boost::system::error_code &ec, std::size_t length) {
+        [this, self, msg](const boost::system::error_code &ec, std::size_t length) {
             if (!ec) {
                 //success write to np_golden => expected response of np_golden, so read
-                do_read();
+                if (msg == "exit") {
+                    std::cerr << "user-" << user_id << " exit\n";
+                    my_socket.close();
+                } else {
+                    do_read();
+                }
+                
             } else {
                 std::cerr << "do_write error: " << ec.message() << std::endl;
             }
@@ -259,68 +264,68 @@ void send_command_from_file(int user_id, std::string content) {
 
 void send_basic_framwork() {
     std::cout << "Content-type: text/html\r\n\r\n";
-    std::cout << "\
-    <!DOCTYPE html>\
-    <html lang=\"en\">\
-        <head>\
-            <meta charset=\"UTF-8\" />\
-            <title>NP Project 3 Console</title>\
-            <link\
-                rel=\"stylesheet\"\
-                href=\"https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css\"\
-                integrity=\"sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2\"\
-                crossorigin=\"anonymous\"\
-            />\
-            <link\
-                href=\"https://fonts.googleapis.com/css?family=Source+Code+Pro\"\
-                rel=\"stylesheet\"\
-            />\
-            <link\
-                rel=\"icon\"\
-                type=\"image/png\"\
-                href=\"https://cdn0.iconfinder.com/data/icons/small-n-flat/24/678068-terminal-512.png\"\
-            />\
-            <style>\
-            * {\
-                font-family: 'Source Code Pro', monospace;\
-                font-size: 1rem !important;\
-            }\
-            body {\
-                background-color: #212529;\
-            }\
-            pre {\
-                color: #cccccc;\
-            }\
-            b {\
-                color: #01b468;\
-            }\
-            </style>\
-        </head>\
-        <body>\
-            <table class=\"table table-dark table-bordered\">\
-                <thead>\
-                    <tr id=\"table_head\">\
-                    </tr>\
-                </thead>\
-                <tbody>\
-                    <tr id=\"table_body\">\
-                    </tr>\
-                </tbody>\
-            </table>\
-        </body>\
-    </html>" << std::flush;
+    std::cout << R"(
+    <!DOCTYPE html>
+    <html lang="en">
+        <head>
+            <meta charset="UTF-8" />
+            <title>NP Project 3 Console</title>
+            <link
+                rel="stylesheet"
+                href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css"
+                integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2"
+                crossorigin="anonymous"
+            />
+            <link
+                href="https://fonts.googleapis.com/css?family=Source+Code+Pro"
+                rel="stylesheet"
+            />
+            <link
+                rel="icon"
+                type="image/png"
+                href="https://cdn0.iconfinder.com/data/icons/small-n-flat/24/678068-terminal-512.png"
+            />
+            <style>
+            * {
+                font-family: 'Source Code Pro', monospace;
+                font-size: 1rem !important;
+            }
+            body {
+                background-color: #212529;
+            }
+            pre {
+                color: #cccccc;
+            }
+            b {
+                color: #FFC249;
+            }
+            </style>
+        </head>
+        <body>
+            <table class="table table-dark table-bordered">
+                <thead>
+                    <tr id="table_head">
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr id="table_body">
+                    </tr>
+                </tbody>
+            </table>
+        </body>
+    </html>
+    )" << std::flush;
 
     // construct speccific user info
     for (int i = 0; i < User_Info_Table::getInstance().user_count; i++) {
         std::string URL = User_Info_Table::getInstance().user_info_table[i].URL;
         std::string port =
             User_Info_Table::getInstance().user_info_table[i].port;
-        std::cout
-            << "<script>document.querySelector('#table_head').innerHTML += '";
-        std::cout << "<th scope=\\\"col\\\">" + URL + ":" + port + "</th>"
-                  << "';</script>" << std::flush;
-        std::string msg = "<td><pre id=\\\"user_" + std::to_string(i) +
-                          "\\\" class=\\\"mb-0\\\"></pre></td>";
+        std::cout << "<script>document.querySelector('#table_head').innerHTML += '";
+        std::cout << R"(<th scope=\"col\">)" + URL + ":" + port + "</th>" << "';</script>" << std::flush;
+        
+        // table body
+        std::string msg = R"(<td><pre id="user_)" + std::to_string(i) + R"(" class="mb-0"></pre></td>)";
         std::cout
             << "<script>document.querySelector('#table_body').innerHTML += '"
             << msg << "';</script>" << std::flush;
