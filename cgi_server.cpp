@@ -400,7 +400,7 @@ void client_session::show_console() {
 
 std::string get_panel_page() {
     using namespace std;
-    string panel_part1 = R"(
+    string basic_framework = R"(
 	<!DOCTYPE html>
 	<html lang="en">
 	  <head>
@@ -447,10 +447,10 @@ std::string get_panel_page() {
                      "</option>";
     }
 
-    string panel_part2;
+    string table_part;
     int N_SERVERS = 5;
     for (int i = 0; i < N_SERVERS; i++) {
-        panel_part2 += (boost::format(R"(
+        table_part += (boost::format( R"(
 			<tr>
 	          <th scope="row" class="align-middle">Session %1%</th>
 	          <td>
@@ -477,11 +477,13 @@ std::string get_panel_page() {
 	            </select>
 	          </td>
 	        </tr>
-			)") % to_string(i + 1) %
-                        to_string(i) % host_menu)
+			)") 
+            % to_string(i + 1) 
+            %to_string(i) 
+            % host_menu)
                            .str();
     }
-    string panel_part3 = R"(
+    string submit_button = R"(
 			<tr>
 	          <td colspan="3"></td>
 	          <td>
@@ -494,7 +496,7 @@ std::string get_panel_page() {
 	  </body>
 	  </html>
 	)";
-    return "HTTP/1.1 200 OK\r\nContent-type: text/html\r\n\r\n" + panel_part1 + panel_part2 + panel_part3 + "\r\n\r\n";
+    return "HTTP/1.1 200 OK\r\nContent-type: text/html\r\n\r\n" + basic_framework + table_part + submit_button + "\r\n\r\n";
 }
 
 std::string get_console_basic_framwork() {
