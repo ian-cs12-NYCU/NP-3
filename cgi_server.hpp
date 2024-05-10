@@ -55,13 +55,14 @@ class Shell_Connector : public std::enable_shared_from_this<Shell_Connector> {
   public:
     int user_id;
 
-    Shell_Connector(int id);
+    Shell_Connector(int id, std::shared_ptr<tcp::socket> client_session_socket);
     void start();
 
   private:
     tcp::resolver resolver;
     std::ifstream file_in;
     tcp::socket my_socket;
+    std::shared_ptr<tcp::socket> client_socket;
     char data[MAX_MESSAGE_LEN];
 
     void resolve_handler();
@@ -69,6 +70,8 @@ class Shell_Connector : public std::enable_shared_from_this<Shell_Connector> {
     void do_read();
     void do_write(std::string msg);
     void open_file(std::string file_name);
+    void send_shell_output(int user_id, std::string content);
+    void send_command_from_file(int user_id, std::string content);
 };
 
 /**********************
@@ -146,7 +149,5 @@ class server {
  *  Helper Function
 ***********************/
 
-void send_shell_output(int user_id, std::string content);
-void send_command_from_file(int user_id, std::string content);
 std::string get_panel_page() ;
 std::string get_console_basic_framwork() ;

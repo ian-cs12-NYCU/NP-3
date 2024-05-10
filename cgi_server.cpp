@@ -25,8 +25,8 @@ int main(int argc, char *argv[]) {
  *   Shell_Connector
  **********************************/
 
-Shell_Connector::Shell_Connector(int id)
-        : user_id(id), resolver(IOContext), my_socket(IOContext) {}
+Shell_Connector::Shell_Connector(int id, std::shared_ptr<tcp::socket> client_session_socket)
+        : user_id(id), resolver(IOContext), my_socket(IOContext), client_socket(client_session_socket) {}
 
 void Shell_Connector::start() { resolve_handler(); }
 
@@ -137,6 +137,92 @@ void Shell_Connector::open_file(std::string file_name) {
     file_in.open(path.data());
 }
 
+// shell output: welcome, prompt, command result, ..... 
+// from: np_golden
+// display: browser
+void Shell_Connector::send_shell_output(int user_id, std::string content) {
+    std::string parsedContent;
+    for(int i = 0; i < (int) content.length(); i++){
+        switch (content[i]){
+        case '\n':
+            parsedContent += "<br>";
+            break;
+        case '\r':
+            parsedContent += "";
+            break;
+        case '\'':
+            parsedContent += "\\'";
+            break;
+        case '<':
+            parsedContent += "&lt;";
+            break;
+        case '>':
+            parsedContent += "&gt;";
+            break;
+        case '&':
+            parsedContent += "&amp;";
+            break;
+        default:
+            parsedContent += content[i];
+            break;
+        }
+    }
+    
+    std::string msg = "<script>document.querySelector('#user_" + std::to_string(user_id) + "').innerHTML += '" + parsedContent + "';</script>";
+    async_write(*client_socket, buffer(msg, msg.length()), [this](boost::system::error_code ec, std::size_t length) {
+        if (!ec) {
+            std::cout << "send_shell_output success" << std::endl;
+        } else {
+            std::cerr << "send_shell_output error: " << ec.message() << std::endl;
+        }
+    });
+}
+
+
+// command 
+// from: file
+// to: np_golden
+// display: browser
+void Shell_Connector::send_command_from_file(int user_id, std::string content) {
+    /* trans shell's output to html */
+    std::string parsedContent;
+    for(int i = 0; i < (int) content.length(); i++){
+        switch (content[i]){
+        case '\n':
+            parsedContent += "<br>";
+            break;
+        case '\r':
+            parsedContent += "";
+            break;
+        case '\'':
+            parsedContent += "\\'";
+            break;
+        case '<':
+            parsedContent += "&lt;";
+            break;
+        case '>':
+            parsedContent += "&gt;";
+            break;
+        case '&':
+            parsedContent += "&amp;";
+            break;
+        default:
+            parsedContent += content[i];
+            break;
+        }
+    }
+    std::string msg = "<script>document.querySelector('#user_" + std::to_string(user_id) + "').innerHTML += '<b>" + parsedContent + "</b>';</script>";
+    async_write(*client_socket, buffer(msg, msg.length()), [this](boost::system::error_code ec, std::size_t length) {
+        if (!ec) {
+            std::cout << "send_command_from_file success" << std::endl;
+        } else {
+            std::cerr << "send_command_from_file error: " << ec.message() << std::endl;
+        }
+    });
+    
+}
+
+
 /*******************************
  *   User_Info_Table
  **********************************/
@@ -226,8 +312,10 @@ void client_session::do_CGI() {
         User_Info_Table::getInstance().parsing(env_map["QUERY_STRING"]);
         show_console();
 
+        std::shared_ptr<tcp::socket> self_socket_ptr = std::make_shared<tcp::socket>(std::move(socket_));
+        
         for (int i=0; i<User_Info_Table::getInstance().user_count; i++) {
-            std::make_shared<Shell_Connector>(i)->start();
+            std::make_shared<Shell_Connector>(i, self_socket_ptr)->start();
         }
 
     } else {
@@ -484,73 +572,4 @@ std::string get_console_basic_framwork() {
     return ret;
 }
 
-// shell output: welcome, prompt, command result, ..... 
-// from: np_golden
-// display: browser
-void send_shell_output(int user_id, std::string content) {
-    std::string parsedContent;
-    for(int i = 0; i < (int) content.length(); i++){
-        switch (content[i]){
-        case '\n':
-            parsedContent += "<br>";
-            break;
-        case '\r':
-            parsedContent += "";
-            break;
-        case '\'':
-            parsedContent += "\\'";
-            break;
-        case '<':
-            parsedContent += "&lt;";
-            break;
-        case '>':
-            parsedContent += "&gt;";
-            break;
-        case '&':
-            parsedContent += "&amp;";
-            break;
-        default:
-            parsedContent += content[i];
-            break;
-        }
-    }
-    std::cout << "<script>document.querySelector('#user_" + std::to_string(user_id) + "').innerHTML += '" << parsedContent << "';</script>" << std::flush;
-}
 
-// command 
-// from: file
-// to: np_golden
-// display: browser
-void send_command_from_file(int user_id, std::string content) {
-    /* trans shell's output to html */
-    std::string parsedContent;
-    for(int i = 0; i < (int) content.length(); i++){
-        switch (content[i]){
-        case '\n':
-            parsedContent += "<br>";
-            break;
-        case '\r':
-            parsedContent += "";
-            break;
-        case '\'':
-            parsedContent += "\\'";
-            break;
-        case '<':
-            parsedContent += "&lt;";
-            break;
-        case '>':
-            parsedContent += "&gt;";
-            break;
-        case '&':
-            parsedContent += "&amp;";
-            break;
-        default:
-            parsedContent += content[i];
-            break;
-        }
-    }
-    
-    
-    std::cout << "<script>document.querySelector('#user_" + std::to_string(user_id) + "').innerHTML += '<b>" << parsedContent << "</b>';</script>" << std::flush;
-    
-}
