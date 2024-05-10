@@ -1,5 +1,8 @@
 #include "cgi_server.hpp"
 
+io_context IOContext;
+
+
 int main(int argc, char *argv[]) {
     try {
         if (argc != 2) {
@@ -7,16 +10,131 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        boost::asio::io_context io_context;
+        
+        server s(std::atoi(argv[1]));
 
-        server s(io_context, std::atoi(argv[1]));
-
-        io_context.run();
+        IOContext.run();
     } catch (std::exception &e) {
         std::cerr << "Exception: " << e.what() << "\n";
     }
 
     return 0;
+}
+
+/*******************************
+ *   Shell_Connector
+ **********************************/
+
+Shell_Connector::Shell_Connector(int id)
+        : user_id(id), resolver(IOContext), my_socket(IOContext) {}
+
+void Shell_Connector::start() { resolve_handler(); }
+
+void Shell_Connector::resolve_handler() {
+    auto self(shared_from_this());
+#ifndef DEBUG
+    std::string URL =
+        User_Info_Table::getInstance().user_info_table[user_id].URL;
+    std::string port =
+        User_Info_Table::getInstance().user_info_table[user_id].port;
+#else
+    std::string URL = "localhost";
+    std::string port = "5555";
+#endif
+
+    resolver.async_resolve(
+        URL, port,
+        [this, self, URL, port](const boost::system::error_code &ec,
+                                tcp::resolver::results_type results) {
+            if (!ec) {
+                std::cerr << "resolve_handler success ,user-"
+                          << std::to_string(user_id) << "  URL= " << URL
+                          << "  port=" << port << "\n";
+                connect_handler(results);
+            } else {
+                std::cerr << "resolve_handler ,user-" << std::to_string(user_id)
+                          << "URL= " << URL << "port=" << port
+                          << " ------ error:" << ec.message() << std::endl;
+                my_socket.close();
+            }
+        });
+}
+
+void Shell_Connector::connect_handler(
+    boost::asio::ip::tcp::resolver::results_type endpoints) {
+    auto self(shared_from_this());
+    my_socket.async_connect(
+        endpoints->endpoint(),
+        [this, self](const boost::system::error_code &ec) {
+            if (!ec) {
+                std::cerr << "connect_handler success user-" << std::to_string(user_id) << "\n";
+                open_file(User_Info_Table::getInstance().user_info_table[user_id].file_path);
+                do_read();
+            } else {
+                std::cerr << "connect_handler user-" << std::to_string(user_id)
+                          << " -------- error: " << ec.message() << std::endl;
+                my_socket.close();
+            }
+        });
+}
+
+void Shell_Connector::do_read() {
+    auto self(shared_from_this());
+    my_socket.async_read_some(
+        boost::asio::buffer(data, MAX_MESSAGE_LEN),
+        [this, self](const boost::system::error_code &ec, std::size_t length) {
+            if (!ec) {
+                std::string msg(data, length);
+                memset(data, 0, MAX_MESSAGE_LEN);
+
+                // [TODO] send msg to html format by cout
+                send_shell_output(user_id, msg);
+
+                if (length != 0) {
+                    if (msg.find('%', 0) != std::string::npos) { // has prompt => need to read command from file & write to np_golden
+                        std::string command;
+                        getline(file_in, command);
+                        command += "\n";
+                        
+                        send_command_from_file(user_id, command);
+                        do_write(command);
+                    } else {
+                        do_read();
+                    }
+                } else {
+                    std::cerr << "user-" << user_id << " connection closed\n";
+                    my_socket.close();
+                }
+            } else {
+                std::cerr << "user-" << user_id <<" do_read error: " << ec.message() << std::endl;
+                my_socket.close();
+            }
+        });
+}
+
+void Shell_Connector::do_write(std::string msg) {
+    auto self(shared_from_this());
+    boost::asio::async_write(
+        my_socket, boost::asio::buffer(msg),
+        [this, self, msg](const boost::system::error_code &ec, std::size_t length) {
+            if (!ec) {
+                //success write to np_golden => expected response of np_golden, so read
+                if (msg == "exit") {
+                    std::cerr << "user-" << user_id << " exit\n";
+                    my_socket.close();
+                } else {
+                    do_read();
+                }
+                
+            } else {
+                std::cerr << "do_write error: " << ec.message() << std::endl;
+            }
+        });
+}
+
+void Shell_Connector::open_file(std::string file_name) {
+    std::string path = "./test_case/" + file_name;
+    file_in.open(path.data());
 }
 
 /*******************************
@@ -107,6 +225,10 @@ void client_session::do_CGI() {
 
         User_Info_Table::getInstance().parsing(env_map["QUERY_STRING"]);
         show_console();
+
+        for (int i=0; i<User_Info_Table::getInstance().user_count; i++) {
+            std::make_shared<Shell_Connector>(i)->start();
+        }
 
     } else {
         std::cerr << "Unknown CGI: " << exec << std::endl;
@@ -360,4 +482,75 @@ std::string get_console_basic_framwork() {
     }
     
     return ret;
+}
+
+// shell output: welcome, prompt, command result, ..... 
+// from: np_golden
+// display: browser
+void send_shell_output(int user_id, std::string content) {
+    std::string parsedContent;
+    for(int i = 0; i < (int) content.length(); i++){
+        switch (content[i]){
+        case '\n':
+            parsedContent += "<br>";
+            break;
+        case '\r':
+            parsedContent += "";
+            break;
+        case '\'':
+            parsedContent += "\\'";
+            break;
+        case '<':
+            parsedContent += "&lt;";
+            break;
+        case '>':
+            parsedContent += "&gt;";
+            break;
+        case '&':
+            parsedContent += "&amp;";
+            break;
+        default:
+            parsedContent += content[i];
+            break;
+        }
+    }
+    std::cout << "<script>document.querySelector('#user_" + std::to_string(user_id) + "').innerHTML += '" << parsedContent << "';</script>" << std::flush;
+}
+
+// command 
+// from: file
+// to: np_golden
+// display: browser
+void send_command_from_file(int user_id, std::string content) {
+    /* trans shell's output to html */
+    std::string parsedContent;
+    for(int i = 0; i < (int) content.length(); i++){
+        switch (content[i]){
+        case '\n':
+            parsedContent += "<br>";
+            break;
+        case '\r':
+            parsedContent += "";
+            break;
+        case '\'':
+            parsedContent += "\\'";
+            break;
+        case '<':
+            parsedContent += "&lt;";
+            break;
+        case '>':
+            parsedContent += "&gt;";
+            break;
+        case '&':
+            parsedContent += "&amp;";
+            break;
+        default:
+            parsedContent += content[i];
+            break;
+        }
+    }
+    
+    
+    std::cout << "<script>document.querySelector('#user_" + std::to_string(user_id) + "').innerHTML += '<b>" << parsedContent << "</b>';</script>" << std::flush;
+    
 }

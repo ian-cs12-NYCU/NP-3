@@ -20,6 +20,8 @@
 using namespace boost::asio;
 using namespace boost::asio::ip;
 
+extern boost::asio::io_context IOContext;
+
 
 /*******************************
  *   User_Info & User_Info_Table
@@ -43,6 +45,30 @@ class User_Info_Table {
     }
     void parsing(std::string query_string); // parse the query string
   private:
+};
+
+
+/*******************************
+ *   Shell_Connector
+ **********************************/
+class Shell_Connector : public std::enable_shared_from_this<Shell_Connector> {
+  public:
+    int user_id;
+
+    Shell_Connector(int id);
+    void start();
+
+  private:
+    tcp::resolver resolver;
+    std::ifstream file_in;
+    tcp::socket my_socket;
+    char data[MAX_MESSAGE_LEN];
+
+    void resolve_handler();
+    void connect_handler(boost::asio::ip::tcp::resolver::results_type endpoints);
+    void do_read();
+    void do_write(std::string msg);
+    void open_file(std::string file_name);
 };
 
 /**********************
@@ -96,8 +122,8 @@ class client_session : public std::enable_shared_from_this<client_session> {
 ***********************/
 class server {
   public:
-    server(boost::asio::io_context &io_context, short port)
-        : acceptor_(io_context, tcp::endpoint(tcp::v4(), port)) {
+    server(short port)
+        : acceptor_(IOContext, tcp::endpoint(tcp::v4(), port)) {
         do_accept(); // accpet the connection when the server construct
     }
 
@@ -120,5 +146,7 @@ class server {
  *  Helper Function
 ***********************/
 
+void send_shell_output(int user_id, std::string content);
+void send_command_from_file(int user_id, std::string content);
 std::string get_panel_page() ;
 std::string get_console_basic_framwork() ;
